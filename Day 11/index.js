@@ -16,23 +16,44 @@ async function read(file) {
         const key = entry.substring(0, delimiterInx);
         const node = new Node(key, new Set(entry.substring(delimiterInx + 1).trim().split(' ')));
         mappings.set(key, node);
-    })
+    });
+    mappings.set('out', new Node('out', new Set()));
 
-    let numPaths = 0;
-    function traverse(node) {
-        if (!node) {
-            return;
-        }
-        if (node.connections.has('out')) {
-            if (!mappings.has('fft') && !mappings.has('dac')) numPaths++;
-        } else {
-            mappings.delete(node.key);
-            for (const connection of node.connections) {
-                traverse(mappings.get(connection));
+    const mapVals = [...mappings.values()];
+    const topologicalSort = [];
+    const noIncoming = [mappings.get('svr')];
+    while (noIncoming.length > 0) {
+        const node = noIncoming.pop();
+        topologicalSort.push(node);
+        for (const conn of node.connections) {
+            if (mapVals.every((value) => topologicalSort.find(sorted => sorted.key === value.key) || !value.connections.has(conn))) {
+                const other = mappings.get(conn);
+                noIncoming.push(other);
             }
-            mappings.set(node.key, node);
-        }        
+        }
     }
-    traverse(mappings.get('svr'));
+
+    console.log(topologicalSort);
+
+    function traverse(node, seenDac, seenFft) {
+        if (node.key === 'out') {
+            return seenDac && seenFft ? 1 : 0;
+        }
+        if (node.key === 'fft') {
+            seenFft = true;
+        }
+        if (node.key === 'dac') {
+            seenDac = true;
+        }
+        let sum = 0;
+        const thisIndex = topologicalSort.findIndex(val => val.key === node.key);
+        for (const connection of node.connections) {
+            if (topologicalSort.findIndex(val => val.key === connection) > thisIndex) {
+                sum += traverse(mappings.get(connection), seenDac, seenFft);
+            }
+        }
+        return sum;
+    }
+    let numPaths = traverse(mappings.get('svr'), false, false);
     console.log(numPaths);
 }
